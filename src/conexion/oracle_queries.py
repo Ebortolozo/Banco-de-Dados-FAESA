@@ -1,14 +1,3 @@
-###########################################################################
-# Author: Howard Roatti
-# Created: 02/09/2022
-# Last Update: 03/09/2022
-#
-# Essa classe auxilia na conexão com o Banco de Dados Oracle
-# Documentação base: 
-#                  (1) https://cx-oracle.readthedocs.io/en/latest/user_guide/sql_execution.html
-#                  (2) https://cx-oracle.readthedocs.io/en/latest/user_guide/plsql_execution.html
-#                  (3) https://cx-oracle.readthedocs.io/en/latest/index.html
-###########################################################################
 import json
 import cx_Oracle
 from pandas import DataFrame
@@ -16,18 +5,22 @@ from pandas import DataFrame
 class OracleQueries:
 
     def __init__(self, can_write:bool=False):
+        self.conn = None
+        self.cur = None  
         self.can_write = can_write
         self.host = "localhost"
         self.port = 1521
         self.service_name = 'XEPDB1'
         self.sid = 'XE'
-
-        with open("conexion/passphrase/authentication.oracle", "r") as f:
+            
+        with open("src/conexion/passphrase/authentication.oracle", "r") as f:
             self.user, self.passwd = f.read().split(',')            
 
     def __del__(self):
-        if self.cur:
-            self.close()
+        if self.cur:  
+            self.cur.close()
+        if self.conn:  
+            self.conn.close()
 
     def connectionString(self, in_container:bool=False):
         '''
@@ -64,7 +57,8 @@ class OracleQueries:
 
         self.conn = cx_Oracle.connect(user=self.user,
                                       password=self.passwd,
-                                      dsn=self.connectionString()
+                                      dsn=self.connectionString(),
+                                      encoding="UTF-8"
                                      )
         self.cur = self.conn.cursor()
         return self.cur
@@ -106,12 +100,16 @@ class OracleQueries:
         rows = self.cur.fetchall()
         return json.dumps(rows, default=str)
 
-    def write(self, query:str):
-        if not self.can_write:
-            raise Exception('Can\'t write using this connection')
+    def write(self, query: str):
+        try:
+            self.cur.execute(query)
+            self.conn.commit()  
+        except cx_Oracle.DatabaseError as e:
+            error, = e.args
+            print(f"Oracle error code: {error.code}")
+            print(f"Oracle error message: {error.message}")
+            raise
 
-        self.cur.execute(query)
-        self.conn.commit()
 
     def close(self):
         if self.cur:
